@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+donations.db
+static/receipts/*.pdf
+static/qr_*.png
+.env
