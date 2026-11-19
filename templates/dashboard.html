@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f5f7fa; }
+        .navbar-custom { background: linear-gradient(45deg, #ff9800, #ff5722); color: white; }
+        .card { border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .table th { background-color: #343a40; color: white; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-custom px-4">
+    <span class="navbar-brand text-white fw-bold">🛕 Temple Admin</span>
+    <span class="text-white me-3" style="font-size:13px; opacity:0.9;">
+        {{ current_username }} ({{ current_role }})
+    </span>
+    <div class="ms-auto">
+        <a href="/donate/{{ temple_id }}" target="_blank" class="btn btn-success btn-sm me-2">🛕 Donation Page</a>
+        <a href="/counter" class="btn btn-warning btn-sm me-2">🖨️ Counter</a>
+        {% if current_role == 'admin' %}
+        <a href="/manage_sevas" class="btn btn-light btn-sm me-2">🕉️ Manage Sevas</a>
+        {% endif %}
+        <a href="/reports" class="btn btn-light btn-sm me-2">📊 Reports</a>
+        {% if current_role == 'admin' %}
+        <a href="/manage_users" class="btn btn-light btn-sm me-2">👥 Users</a>
+        <a href="/receipt_template" class="btn btn-light btn-sm me-2">📝 Receipt Text</a>
+        <a href="/temple_settings" class="btn btn-light btn-sm me-2">⚙️ Settings</a>
+        <a href="/qr" class="btn btn-success btn-sm me-2">📲 QR Code</a>
+        {% endif %}
+        <a href="/logout" class="btn btn-dark btn-sm">Logout</a>
+    </div>
+</nav>
+
+<div class="container mt-4">
+
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card p-4 text-center border-0 bg-success text-white h-100">
+                <h6>Total Collected</h6>
+                <h2>₹{{ "%.0f"|format(total) }}</h2>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card p-4 text-center border-0 bg-primary text-white h-100">
+                <h6>Total Bookings</h6>
+                <h2>{{ count }}</h2>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card p-4 text-center border-0 bg-warning h-100">
+                <h6>Active Sevas</h6>
+                <h2>{{ active_sevas }}</h2>
+            </div>
+        </div>
+    </div>
+
+    <div class="card p-3">
+        <h5>Recent Bookings</h5>
+        <div class="table-responsive">
+            <table class="table table-striped table-hover mt-2">
+                <thead>
+                    <tr>
+                        <th>Receipt No</th><th>Name</th><th>Phone</th>
+                        <th>Amount</th><th>Payment</th><th>Date</th><th>Printed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in recent %}
+                    <tr>
+                        <td><a href="/receipt/{{ r['receipt_no'] }}">#{{ r['seq_no'] }}</a></td>
+                        <td>{{ r['name'] }}</td>
+                        <td>{{ r['phone'] }}</td>
+                        <td class="text-success fw-bold">₹{{ "%.0f"|format(r['total_amount']) }}</td>
+                        <td>{{ r['payment_method'] }}</td>
+                        <td>{{ r['created_at'] }}</td>
+                        <td>{{ "Yes" if r['printed'] else "No" }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if recent|length == 0 %}
+                    <tr><td colspan="7" class="text-center text-muted">No bookings yet</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>

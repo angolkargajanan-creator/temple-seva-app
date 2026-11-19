@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Receipt Text Template</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f5f7fa; }
+        .navbar-custom { background: linear-gradient(45deg, #ff9800, #ff5722); color: white; }
+        .card { border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        textarea { font-size: 15px; }
+        .preview-slip {
+            width: 100%; max-width: 480px; aspect-ratio: 6 / 4;
+            background: white; border: 1px solid #ccc; border-radius: 6px;
+            padding: 16px; margin: auto;
+            font-family: 'Noto Sans Devanagari', 'Nirmala UI', Arial, sans-serif;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        }
+        .preview-title { text-align: center; font-weight: bold; font-size: 15px; margin-bottom: 8px; }
+        .preview-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; }
+        .preview-subtitle { text-align: center; font-size: 12px; margin-bottom: 8px; }
+        .preview-line { font-size: 12px; margin-bottom: 3px; }
+        .preview-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+        .preview-table th, .preview-table td { border: 1px solid #999; padding: 4px 6px; }
+        .preview-table th { background: #f4f4f4; text-align: left; }
+        .preview-footer { display: flex; justify-content: space-between; font-size: 12px; margin-top: 8px; }
+        .placeholder-hint { font-size: 12px; color: #777; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-custom px-4">
+    <span class="navbar-brand text-white fw-bold">📝 Receipt Text Template</span>
+    <div class="ms-auto">
+        <a href="/dashboard" class="btn btn-light btn-sm">← Dashboard</a>
+    </div>
+</nav>
+
+<div class="container mt-4 mb-5">
+    <div class="row">
+        <div class="col-lg-6">
+            <div class="card p-3 mb-4">
+                <h5>Edit Receipt Wording</h5>
+                <p class="text-muted" style="font-size:13px;">
+                    Type the exact text you want printed. Use <code>{NAME}</code> anywhere you want the
+                    devotee's name inserted automatically. Leave a field blank to use the default shown below it.
+                </p>
+
+                <form method="POST" id="templateForm">
+                    <label class="form-label mt-2">Subtitle (below temple name)</label>
+                    <input type="text" name="receipt_subtitle" id="subtitleInput" class="form-control mb-1"
+                           value="{{ temple['receipt_subtitle'] or '' }}" placeholder="{{ default_subtitle }}"
+                           data-was-null="{{ 'true' if temple['receipt_subtitle'] is none else 'false' }}">
+                    <p class="placeholder-hint mb-3">Default: {{ default_subtitle }}. Leave blank and save to remove this line entirely.</p>
+
+                    <label class="form-label">Line 1 (name line)</label>
+                    <textarea name="receipt_line1" id="line1Input" class="form-control mb-1" rows="2"
+                              placeholder="{{ default_line1 }}"
+                              data-was-null="{{ 'true' if temple['receipt_line1'] is none else 'false' }}">{{ temple['receipt_line1'] or '' }}</textarea>
+                    <p class="placeholder-hint mb-3">Default: {{ default_line1 }}. Leave blank and save to remove this line entirely.</p>
+
+                    <label class="form-label">Line 2 (ritual/seva sentence)</label>
+                    <textarea name="receipt_line2" id="line2Input" class="form-control mb-1" rows="2"
+                              placeholder="{{ default_line2 }}"
+                              data-was-null="{{ 'true' if temple['receipt_line2'] is none else 'false' }}">{{ temple['receipt_line2'] or '' }}</textarea>
+                    <p class="placeholder-hint mb-3">Default: {{ default_line2 }}. Leave blank and save to remove this line entirely.</p>
+
+                    <div class="alert alert-warning py-2 mb-3" style="font-size:13px;">
+                        ⚠️ If you blank out <strong>both</strong> Line 1 and Line 2 (or leave neither with
+                        <code>{NAME}</code>), the devotee's name won't appear anywhere on the receipt.
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100">💾 Save Template</button>
+                </form>
+
+                <a href="#" onclick="openSamplePdf(event); return false;" class="btn btn-outline-success w-100 mt-2">
+                    📄 Generate Sample PDF (exact print output)
+                </a>
+                <p class="text-muted mt-2" style="font-size:12px;">
+                    This button saves your current text first, then shows the exact print output — no
+                    need to click Save separately, and no need to make a real booking just to check wording.
+                </p>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <h5 class="mb-3">Live Preview <span class="text-muted" style="font-size:12px;">(approximate — updates as you type)</span></h5>
+            <div class="preview-slip">
+                <div class="preview-title">{{ temple['name'] }}</div>
+                <div class="preview-row">
+                    <span>तारीख : 13-08-2026</span>
+                    <span>पावती नंबर: <b>1</b></span>
+                </div>
+                <div class="preview-subtitle" id="previewSubtitle"></div>
+                <div class="preview-line" id="previewLine1"></div>
+                <div class="preview-line" id="previewLine2"></div>
+                <div class="preview-line">मो. : 9999999999</div>
+                <table class="preview-table">
+                    <thead>
+                        <tr><th>क्रमांक</th><th>देवकृत्य</th><th style="text-align:right;">रक्कम</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1</td><td>सिंहपुरुष अभिषेक नैवेद्य</td><td style="text-align:right;">100.00</td></tr>
+                        <tr><td>2</td><td>अभिषेक</td><td style="text-align:right;">50.00</td></tr>
+                    </tbody>
+                </table>
+                <div class="preview-footer">
+                    <span>रक्कम रु : ONE HUNDRED FIFTY ONLY.</span>
+                    <span>Total : 150.00</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const SAMPLE_NAME = "SAMPLE NAME";
+const DEFAULT_SUBTITLE = {{ default_subtitle | tojson }};
+const DEFAULT_LINE1 = {{ default_line1 | tojson }};
+const DEFAULT_LINE2 = {{ default_line2 | tojson }};
+
+function esc(s) {
+    const div = document.createElement('div');
+    div.innerText = s;
+    return div.innerHTML;
+}
+
+async function openSamplePdf(evt) {
+    evt.preventDefault();
+    const btn = evt.target.closest('a');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Saving...';
+
+    const newTab = window.open('', '_blank');
+
+    try {
+        const formData = new FormData(document.getElementById('templateForm'));
+        await fetch('/receipt_template', { method: 'POST', body: formData });
+    } catch (e) {}
+
+    btn.innerHTML = originalText;
+    const url = '/receipt_template/preview?t=' + Date.now();
+    if (newTab) {
+        newTab.location.href = url;
+    } else {
+        window.open(url, '_blank');
+    }
+}
+
+const fieldState = {
+    subtitleInput: { touched: false },
+    line1Input: { touched: false },
+    line2Input: { touched: false },
+};
+
+function updatePreview() {
+    const subtitleEl = document.getElementById('subtitleInput');
+    const line1El = document.getElementById('line1Input');
+    const line2El = document.getElementById('line2Input');
+
+    function resolve(el, fallback) {
+        const val = el.value.trim();
+        const wasNull = el.dataset.wasNull === 'true';
+        const touched = fieldState[el.id].touched;
+        if (val === '' && wasNull && !touched) {
+            return fallback;
+        }
+        return val;
+    }
+
+    const subtitle = resolve(subtitleEl, DEFAULT_SUBTITLE);
+    let line1 = resolve(line1El, DEFAULT_LINE1);
+    let line2 = resolve(line2El, DEFAULT_LINE2);
+
+    if (line1 !== '' || line2 === '') {
+        if (!line1.includes('{NAME}') && !line2.includes('{NAME}')) {
+            line1 = (line1 + ' {NAME}').trim();
+        }
+    }
+
+    const subtitleDiv = document.getElementById('previewSubtitle');
+    const line1Div = document.getElementById('previewLine1');
+    const line2Div = document.getElementById('previewLine2');
+
+    subtitleDiv.style.display = subtitle ? '' : 'none';
+    subtitleDiv.innerText = subtitle;
+
+    line1Div.style.display = line1 ? '' : 'none';
+    line1Div.innerHTML = esc(line1).replace('{NAME}', '<b>' + SAMPLE_NAME + '</b>');
+
+    line2Div.style.display = line2 ? '' : 'none';
+    line2Div.innerHTML = esc(line2).replace('{NAME}', '<b>' + SAMPLE_NAME + '</b>');
+}
+
+['subtitleInput', 'line1Input', 'line2Input'].forEach(id => {
+    document.getElementById(id).addEventListener('input', () => {
+        fieldState[id].touched = true;
+        updatePreview();
+    });
+});
+updatePreview();
+</script>
+
+</body>
+</html>

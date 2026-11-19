@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Seva Receipt Report</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f5f7fa; }
+        .navbar-custom { background: linear-gradient(45deg, #ff9800, #ff5722); color: white; }
+        .card { border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .table th { background-color: #343a40; color: white; }
+
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; font-size: 9pt; }
+            .card { box-shadow: none; border: none; padding: 0 !important; margin-bottom: 6pt !important; }
+            .container { max-width: 100% !important; width: 100% !important; }
+            table { font-size: 8pt; }
+            th, td { padding: 2pt 4pt !important; }
+            .table-striped > tbody > tr:nth-of-type(odd) > * {
+                background-color: transparent !important;
+            }
+            tr { page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="d-none d-print-block text-center fw-bold mb-2" style="font-size: 12pt;">
+    Seva Receipt Report — {{ from_date }} to {{ to_date }}
+</div>
+
+<nav class="navbar navbar-expand-lg navbar-custom px-4 no-print">
+    <span class="navbar-brand text-white fw-bold">📊 Seva Receipt Report</span>
+    <div class="ms-auto">
+        <a href="/dashboard" class="btn btn-light btn-sm">← Dashboard</a>
+    </div>
+</nav>
+
+<div class="container mt-4">
+
+    <div class="card p-3 mb-4 no-print">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">From Date</label>
+                <input type="date" name="from_date" class="form-control" value="{{ from_date }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">To Date</label>
+                <input type="date" name="to_date" class="form-control" value="{{ to_date }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Devotee Name</label>
+                <input type="text" name="devotee" class="form-control" value="{{ devotee_filter }}" placeholder="Search by name">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Phone</label>
+                <input type="text" name="phone" class="form-control" value="{{ phone_filter }}" placeholder="Search by phone">
+            </div>
+            <div class="col-md-9">
+                <label class="form-label">Seva (optional)</label>
+                <select name="seva_id" class="form-control">
+                    <option value="">All Sevas</option>
+                    {% for s in all_sevas %}
+                    <option value="{{ s['id'] }}" {{ 'selected' if seva_filter == s['id']|string }}>{{ s['name'] }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary w-100">Filter</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="window.print()">🖨️</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card p-3 mb-4 text-center border-0 bg-success text-white no-print">
+        <h6>Total for Period ({{ from_date }} to {{ to_date }})</h6>
+        <h2>₹{{ "%.0f"|format(grand_total) }}</h2>
+        <p class="mb-0">{{ rows|length }} receipt(s)</p>
+    </div>
+
+    <div class="card p-3">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead>
+                    <tr>
+                        <th>Receipt No</th><th>Date</th><th>Devotee</th>
+                        <th>Sevas</th><th>Amount</th><th>Phone</th><th>Payment</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td><a href="/receipt/{{ row.receipt['receipt_no'] }}">#{{ row.receipt['seq_no'] }}</a></td>
+                        <td>{{ row.receipt['created_at'] }}</td>
+                        <td>{{ row.receipt['name'] }}</td>
+                        <td>
+                            {% for it in row.line_items %}
+                                {{ it['category_name'] }}{% if not loop.last %}, {% endif %}
+                            {% endfor %}
+                        </td>
+                        <td class="text-success fw-bold">₹{{ "%.0f"|format(row.receipt['total_amount']) }}</td>
+                        <td>{{ row.receipt['phone'] }}</td>
+                        <td>{{ row.receipt['payment_method'] }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if rows|length == 0 %}
+                    <tr><td colspan="7" class="text-center text-muted">No receipts found for this period</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="d-none d-print-flex justify-content-between" style="border-top: 2px solid #333; margin-top: 8pt; padding-top: 6pt; font-weight: bold;">
+        <span>Total for Period ({{ from_date }} to {{ to_date }}) — {{ rows|length }} receipt(s)</span>
+        <span>₹{{ "%.0f"|format(grand_total) }}</span>
+    </div>
+
+</div>
+
+</body>
+</html>

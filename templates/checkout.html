@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Checkout - {{ temple_name }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f5f7fa; }
+        .card { border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+
+<div class="container mt-4 mb-5" style="max-width: 500px;">
+
+    <h4 class="text-center mb-3">🛕 {{ temple_name }}</h4>
+
+    <div class="card p-3 mb-3">
+        <h6>Order Summary</h6>
+        <table class="table table-sm mb-0">
+            {% for it in items %}
+            <tr>
+                <td>{{ it.name }}</td>
+                <td class="text-end">₹{{ "%.0f"|format(it.amount) }}</td>
+            </tr>
+            {% endfor %}
+            <tr class="fw-bold border-top">
+                <td>Total</td>
+                <td class="text-end">₹{{ "%.0f"|format(total) }}</td>
+            </tr>
+        </table>
+        <p class="text-muted mb-0 mt-2" style="font-size: 13px;">{{ name }} · {{ phone }}</p>
+    </div>
+
+    <div class="card p-4 text-center">
+
+        {% if use_gateway %}
+            <p>Pay securely to confirm your booking</p>
+            <button id="pay-btn" class="btn btn-success w-100 py-2">💳 Pay ₹{{ "%.0f"|format(total) }}</button>
+
+            <form id="confirmForm" action="/confirm_payment" method="POST" style="display:none;">
+                <input type="hidden" name="cart_json" value="{{ cart_json }}">
+                <input type="hidden" name="payment_method" value="razorpay">
+                <input type="hidden" name="razorpay_payment_id" id="rp_payment_id">
+                <input type="hidden" name="razorpay_order_id" id="rp_order_id" value="{{ order_id }}">
+                <input type="hidden" name="razorpay_signature" id="rp_signature">
+            </form>
+
+            <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+            <script>
+                var options = {
+                    "key": "{{ key_id }}",
+                    "amount": "{{ (total * 100) | int }}",
+                    "currency": "INR",
+                    "name": "{{ temple_name }}",
+                    "description": "Seva Booking",
+                    "order_id": "{{ order_id }}",
+                    "handler": function (response) {
+                        document.getElementById('rp_payment_id').value = response.razorpay_payment_id;
+                        document.getElementById('rp_signature').value = response.razorpay_signature;
+                        document.getElementById('confirmForm').submit();
+                    }
+                };
+                var rzp = new Razorpay(options);
+                document.getElementById('pay-btn').onclick = function (e) {
+                    rzp.open();
+                    e.preventDefault();
+                };
+            </script>
+
+        {% else %}
+            {% if upi_qr_data_uri %}
+                <p class="mb-2">Scan with any UPI app to pay <strong>₹{{ "%.0f"|format(total) }}</strong></p>
+                <img src="{{ upi_qr_data_uri }}" alt="UPI QR Code" style="width:220px; height:220px; margin-bottom:10px;">
+                <p class="mb-1" style="font-size:14px;">
+                    <strong>UPI ID:</strong> <span style="user-select:all;">{{ upi_id }}</span>
+                </p>
+                <a href="{{ upi_link }}" class="btn btn-outline-primary w-100 mb-3">📱 Open in UPI App</a>
+                <p class="text-muted" style="font-size:13px;">
+                    After paying, tap below to confirm your booking.
+                </p>
+            {% else %}
+                <p class="text-muted">
+                    This temple hasn't configured an online payment gateway or UPI ID yet.
+                    Please complete payment via the counter and tap below to confirm.
+                </p>
+            {% endif %}
+            <form action="/confirm_payment" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="cart_json" value="{{ cart_json }}">
+                <input type="hidden" name="payment_method" value="manual">
+
+                {% if upi_qr_data_uri %}
+                <label class="form-label text-start w-100" style="font-size:13px;">
+                    Upload Payment Screenshot <span class="text-muted">(optional, helps us verify faster)</span>
+                </label>
+                <input type="file" name="payment_proof" accept="image/*,application/pdf" class="form-control mb-3">
+                {% endif %}
+
+                <button type="submit" class="btn btn-success w-100 py-2">✅ I Have Paid - Confirm Booking</button>
+            </form>
+        {% endif %}
+
+    </div>
+</div>
+
+</body>
+</html>
