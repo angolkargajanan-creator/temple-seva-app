@@ -600,13 +600,20 @@ def inject_role_context():
 
 @app.route('/')
 def home():
-    return redirect('/login')
+    # Public landing page = About Us. Staff log in at /login (not linked publicly).
+    return _render_legal('about', 'About Us')
 
 
 # ================= REGISTER =================
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    # Registration is open only until the first admin exists
+    _c = get_conn()
+    _n = _c.execute("SELECT COUNT(*) FROM temples").fetchone()[0]
+    _c.close()
+    if _n > 0:
+        return redirect('/login')
     if request.method == 'POST':
         name = request.form['name']
         username = request.form['username']
