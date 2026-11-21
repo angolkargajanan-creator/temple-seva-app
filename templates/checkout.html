@@ -47,28 +47,26 @@
         <p class="text-muted mb-0 mt-2" style="font-size: 13px;">{{ name }} · {{ phone }}</p>
     </div>
 
-    {% if use_gateway or allow_manual %}
     <h6 class="mb-2">Choose payment method</h6>
 
-    <div class="pay-opt mb-2" id="opt-upi" onclick="choose('{{ 'online' if use_gateway else 'upi' }}', 'upi')">
+    <div class="pay-opt mb-2" id="opt-upi" onclick="choose('{{ 'online' if use_gateway else ('upi' if allow_manual else 'none') }}', 'upi')">
         <span class="radio"></span>
         <div><strong>📱 UPI</strong><br>
             <span class="text-muted" style="font-size:12px;">GPay · PhonePe · Paytm · any UPI app</span></div>
     </div>
 
-    {% if use_gateway %}
-    <div class="pay-opt mb-2" id="opt-card" onclick="choose('online', 'card')">
+    <div class="pay-opt mb-2" id="opt-card" onclick="choose('{{ 'online' if use_gateway else 'none' }}', 'card')">
         <span class="radio"></span>
         <div><strong>💳 Debit / Credit Card</strong></div>
     </div>
 
-    <div class="pay-opt mb-3" id="opt-net" onclick="choose('online', 'net')">
+    <div class="pay-opt mb-3" id="opt-net" onclick="choose('{{ 'online' if use_gateway else 'none' }}', 'net')">
         <span class="radio"></span>
         <div><strong>🏦 Net Banking</strong></div>
     </div>
-    {% endif %}
-    {% else %}
-    <div class="card p-4 text-center">
+
+    {% if not use_gateway and not allow_manual %}
+    <div class="card p-4 text-center pay-panel" id="panel-none" style="display:none;">
         <h6 class="mb-3">Payment gateway is not connected</h6>
         <a href="/donate/{{ temple_id }}" class="btn btn-outline-secondary">← Back</a>
     </div>
@@ -162,7 +160,7 @@
 
     <script>
     function choose(panel, opt) {
-        ['online','upi'].forEach(function (k) {
+        ['online','upi','none'].forEach(function (k) {
             var p = document.getElementById('panel-' + k);
             if (p) p.style.display = (k === panel) ? 'block' : 'none';
         });
