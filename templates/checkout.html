@@ -47,28 +47,32 @@
         <p class="text-muted mb-0 mt-2" style="font-size: 13px;">{{ name }} · {{ phone }}</p>
     </div>
 
+    {% if use_gateway or allow_manual %}
     <h6 class="mb-2">Choose payment method</h6>
 
-    {# UPI: gateway if configured, otherwise direct QR #}
     <div class="pay-opt mb-2" id="opt-upi" onclick="choose('{{ 'online' if use_gateway else 'upi' }}', 'upi')">
         <span class="radio"></span>
         <div><strong>📱 UPI</strong><br>
             <span class="text-muted" style="font-size:12px;">GPay · PhonePe · Paytm · any UPI app</span></div>
     </div>
 
-    <div class="pay-opt mb-2 {% if not use_gateway %}disabled{% endif %}" id="opt-card"
-         {% if use_gateway %}onclick="choose('online', 'card')"{% endif %}>
+    {% if use_gateway %}
+    <div class="pay-opt mb-2" id="opt-card" onclick="choose('online', 'card')">
         <span class="radio"></span>
-        <div><strong>💳 Debit / Credit Card</strong>
-            {% if not use_gateway %}<br><span class="badge bg-secondary">Coming soon</span>{% endif %}</div>
+        <div><strong>💳 Debit / Credit Card</strong></div>
     </div>
 
-    <div class="pay-opt mb-3 {% if not use_gateway %}disabled{% endif %}" id="opt-net"
-         {% if use_gateway %}onclick="choose('online', 'net')"{% endif %}>
+    <div class="pay-opt mb-3" id="opt-net" onclick="choose('online', 'net')">
         <span class="radio"></span>
-        <div><strong>🏦 Net Banking</strong>
-            {% if not use_gateway %}<br><span class="badge bg-secondary">Coming soon</span>{% endif %}</div>
+        <div><strong>🏦 Net Banking</strong></div>
     </div>
+    {% endif %}
+    {% else %}
+    <div class="card p-4 text-center">
+        <h6 class="mb-3">Payment gateway is not connected</h6>
+        <a href="/donate/{{ temple_id }}" class="btn btn-outline-secondary">← Back</a>
+    </div>
+    {% endif %}
 
     {% if use_gateway %}
     <div class="card p-4 text-center pay-panel" id="panel-online" style="display:none;">
@@ -110,6 +114,7 @@
     </div>
     {% endif %}
 
+    {% if allow_manual and not use_gateway %}
     <div class="card p-4 text-center pay-panel" id="panel-upi" style="display:none;">
 
             {% if upi_qr_data_uri %}
@@ -153,6 +158,7 @@
             </form>
         
     </div>
+    {% endif %}
 
     <script>
     function choose(panel, opt) {
