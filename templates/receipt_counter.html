@@ -16,7 +16,12 @@
 
     <div class="text-center mb-3">
         <div style="font-size: 40px;">🙏</div>
+        {% if receipt['payment_verified'] %}
         <h5>Payment Successful</h5>
+        {% else %}
+        <h5>Booking Received</h5>
+        <p class="text-muted mb-1" style="font-size:12px;">Payment is confirmed by the temple office. Please keep this page.</p>
+        {% endif %}
         <p class="text-muted mb-0" style="font-size:12px;">Payment: {{ receipt['payment_method'] }} · Status: {{ receipt['payment_status'] }}</p>
 
         {% if current_role in ['admin', 'user'] %}
@@ -47,6 +52,12 @@
         {% endif %}
 
         {% if current_role in ['admin', 'user'] and not receipt['payment_verified'] %}
+        <form action="/receipt/{{ receipt['receipt_no'] }}/delete" method="POST" class="mt-2">
+            <button type="submit" class="btn btn-outline-danger btn-sm"
+                    onclick="return confirm('Payment NOT received? This will permanently delete this booking.')">
+                🗑️ Payment Not Received — Delete This Booking
+            </button>
+        </form>
         <form action="/receipt/{{ receipt['receipt_no'] }}/verify" method="POST" class="mt-2">
             <button type="submit" class="btn btn-success btn-sm"
                     onclick="return confirm('Confirm you have checked the temple\'s actual bank/UPI statement and this payment genuinely arrived?')">
