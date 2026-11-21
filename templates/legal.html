@@ -18,7 +18,7 @@
 <div class="container wrap mt-4 mb-5">
     <h4 class="text-center mb-1">🛕 {{ t_name }}</h4>
     <div class="text-center nav-links mb-3">
-        <a href="/about">About Us</a> | <a href="/terms">Terms &amp; Conditions</a> | <a href="/privacy">Privacy Policy</a>
+        <a href="/about">About Us</a> | <a href="/terms">Terms &amp; Conditions</a> | <a href="/privacy">Privacy Policy</a> | <a href="/contact">Contact Us</a>
         {% if t_id %}| <a href="/donate/{{ t_id }}">Book a Seva</a>{% endif %}
     </div>
     <div class="doc">
@@ -39,10 +39,11 @@
 
         <h2>Contact Us</h2>
         <p>
-            {{ t_name }}<br>
-            {% if t_addr %}{{ t_addr }}<br>{% endif %}
-            {% if t_phone %}Phone: {{ t_phone }}<br>{% endif %}
-            {% if t_upi %}UPI ID: {{ t_upi }}{% endif %}
+            {{ c_name }}<br>
+            {{ c_addr }}<br>
+            Phone: {{ c_phone }}<br>
+            Email: {{ c_email }}<br>
+            <a href="/contact">Full contact page</a>
         </p>
 
 {% elif page == 'terms' %}
@@ -77,7 +78,18 @@
         <p>These terms are governed by the laws of India. Any dispute will be subject to the courts having jurisdiction over the place where the Sansthan is located.</p>
 
         <h2>10. Contact</h2>
-        <p>For questions, write to or call the temple office:{% if t_addr %} {{ t_addr }}.{% endif %}{% if t_phone %} Phone: {{ t_phone }}.{% endif %}</p>
+        <p>For questions, write to or call the temple office: {{ c_name }}, {{ c_addr }}. Phone: {{ c_phone }}. Email: {{ c_email }}.</p>
+
+{% elif page == 'contact' %}
+        <p>For booking help, receipts, refund requests or any other question, please contact the temple office.</p>
+
+        <h2>{{ c_name }}</h2>
+        <p>
+            {{ c_addr }}<br>
+            Phone: <a href="tel:+91{{ c_phone|replace(' ','') }}">{{ c_phone }}</a><br>
+            Email: <a href="mailto:{{ c_email }}">{{ c_email }}</a>
+        </p>
+        <p class="muted">When you write to us about a booking, please mention your receipt number and the phone number used for the booking.</p>
 
 {% else %}
         <p>{{ t_name }} ("the Sansthan") respects your privacy. This policy explains what personal information we collect through this website, why, and how we protect it.</p>
@@ -85,6 +97,7 @@
         <h2>1. Information we collect</h2>
         <ul>
             <li>Name and phone number you enter while booking a seva</li>
+            <li>Your email address, only if you choose to give it</li>
             <li>Optional remarks such as gotra or nakshatra</li>
             <li>The sevas you chose, the amount, the date and time, and the receipt number</li>
             <li>An optional payment screenshot, if you upload one</li>
@@ -122,7 +135,7 @@
         <p>We may update this policy from time to time. The latest version is always on this page.</p>
 
         <h2>10. Contact</h2>
-        <p>For privacy questions, contact the temple office:{% if t_addr %} {{ t_addr }}.{% endif %}{% if t_phone %} Phone: {{ t_phone }}.{% endif %}</p>
+        <p>For privacy questions, contact the temple office: {{ c_name }}, {{ c_addr }}. Phone: {{ c_phone }}. Email: {{ c_email }}.</p>
 {% endif %}
     </div>
 </div>

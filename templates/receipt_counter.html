@@ -72,6 +72,9 @@
         {% if receipt['line2_text'] %}
         <p class="mb-1" style="font-size:14px;">{{ receipt['line2_text'] | safe }}</p>
         {% endif %}
+        {% if receipt['email'] %}
+        <p class="mb-1"><strong>Email:</strong> {{ receipt['email'] }}</p>
+        {% endif %}
         {% if receipt['phone'] %}
         <p class="mb-1"><strong>Phone:</strong> {{ receipt['phone'] }}</p>
         {% endif %}
