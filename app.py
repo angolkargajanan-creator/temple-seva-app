@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, session, url_for, send_from_directory
+import re
 import sqlite3
 import os
 import json
@@ -202,6 +203,7 @@ def init_db():
             pdf_path TEXT
         )
     ''')
+    _add_column_if_missing(c, 'receipts', 'email', 'TEXT')
     _add_column_if_missing(c, 'receipts', 'seq_no', 'INTEGER')
     _add_column_if_missing(c, 'receipts', 'subtitle_text', 'TEXT')
     _add_column_if_missing(c, 'receipts', 'line1_text', 'TEXT')
@@ -1130,6 +1132,13 @@ def receipt_template_preview():
 # ---------------------------------------------------------------
 # Public information pages: About Us, Terms & Conditions, Privacy
 # ---------------------------------------------------------------
+# Official contact details shown on the public Contact Us page
+CONTACT_NAME = 'SHREE MAHALASA SAUNSTHAN'
+CONTACT_ADDR = 'MARDOL, GOA - 403 404'
+CONTACT_PHONE = '98221 33806'
+CONTACT_EMAIL = 'info@shreemahalasasaunsthan.org'
+
+
 def _render_legal(page, title):
     conn = get_conn()
     c = conn.cursor()
@@ -1144,6 +1153,8 @@ def _render_legal(page, title):
         t_phone=(t['phone'] if t and t['phone'] else ''),
         t_upi=(t['upi_id'] if t and t['upi_id'] else ''),
         updated=datetime.now().strftime('%d %B %Y'),
+        c_name=CONTACT_NAME, c_addr=CONTACT_ADDR,
+        c_phone=CONTACT_PHONE, c_email=CONTACT_EMAIL,
     )
 
 
@@ -1155,6 +1166,11 @@ def about_page():
 @app.route('/terms')
 def terms_page():
     return _render_legal('terms', 'Terms & Conditions')
+
+
+@app.route('/contact')
+def contact_page():
+    return _render_legal('contact', 'Contact Us')
 
 
 @app.route('/privacy')
@@ -1254,6 +1270,9 @@ def checkout():
     temple_id = request.form['temple_id']
     name = request.form['name']
     phone = request.form['phone']
+    email = request.form.get('email', '').strip()[:120]
+    if email and not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+        return "Invalid email address", 400
     remarks = request.form.get('remarks', '')
 
     # regular sevas: value format "categoryId:chosenAmount"
@@ -1330,6 +1349,7 @@ def checkout():
         'temple_id': temple_id,
         'name': name,
         'phone': phone,
+        'email': email,
         'remarks': remarks,
         'items': items,
         'total': total,
@@ -1438,12 +1458,12 @@ def confirm_payment():
         try:
             c.execute("""
                 INSERT INTO receipts
-                (temple_id, receipt_no, seq_no, name, phone, remarks, total_amount,
+                (temple_id, receipt_no, seq_no, name, phone, email, remarks, total_amount,
                  payment_method, payment_id, payment_status, created_at, printed,
                  subtitle_text, line1_text, line2_text, payment_verified)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
             """, (
-                temple_id, receipt_no, seq_no, cart['name'], cart['phone'], cart['remarks'],
+                temple_id, receipt_no, seq_no, cart['name'], cart['phone'], cart.get('email', ''), cart['remarks'],
                 cart['total'], payment_method, payment_id, payment_status, created_at,
                 subtitle_text, line1_text, line2_text, payment_verified
             ))

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>{{ title }} - {{ t_name }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f5f7fa; }
+        .wrap { max-width: 820px; }
+        .doc { background:#fff; border-radius:15px; box-shadow:0 5px 15px rgba(0,0,0,.08); padding:28px; }
+        h1 { font-size:26px; color:#7a2e0e; }
+        h2 { font-size:18px; margin-top:24px; color:#7a2e0e; }
+        .nav-links a { margin:0 8px; font-size:14px; }
+        .muted { color:#777; font-size:13px; }
+    </style>
+</head>
+<body>
+<div class="container wrap mt-4 mb-5">
+    <h4 class="text-center mb-1">🛕 {{ t_name }}</h4>
+    <div class="text-center nav-links mb-3">
+        <a href="/about">About Us</a> | <a href="/terms">Terms &amp; Conditions</a> | <a href="/privacy">Privacy Policy</a> | <a href="/contact">Contact Us</a>
+        {% if t_id %}| <a href="/donate/{{ t_id }}">Book a Seva</a>{% endif %}
+    </div>
+    <div class="doc">
+        <h1>{{ title }}</h1>
+        <p class="muted">Last updated: {{ updated }}</p>
+
+{% if page == 'about' %}
+        <p><strong>{{ t_name }}</strong> is a religious and charitable institution dedicated to the worship of Shree Mahalasa Narayani and to serving the devotee community.</p>
+
+        <h2>Our Purpose</h2>
+        <p>We conduct daily worship, special sevas and festival observances, and we look after the temple premises for the benefit of all devotees.</p>
+
+        <h2>Online Seva Booking</h2>
+        <p>Devotees can scan the temple QR code, choose the sevas they wish to offer, pay by UPI and receive a receipt right away. The same receipt can be collected in printed form at the temple counter. This saves time at the counter, especially on festival days.</p>
+
+        <h2>How Offerings Are Used</h2>
+        <p>Amounts received through sevas and donations are used for temple worship, upkeep of the premises, festivals and the charitable activities of the Sansthan.</p>
+
+        <h2>Contact Us</h2>
+        <p>
+            {{ c_name }}<br>
+            {{ c_addr }}<br>
+            Phone: {{ c_phone }}<br>
+            Email: {{ c_email }}<br>
+            <a href="/contact">Full contact page</a>
+        </p>
+
+{% elif page == 'terms' %}
+        <p>Please read these terms before booking a seva or making a donation through this website. By using the website you agree to them.</p>
+
+        <h2>1. About the service</h2>
+        <p>This website lets devotees book sevas and make offerings to {{ t_name }} ("the Sansthan"). A booking is a request to have the chosen seva performed on the devotee's behalf.</p>
+
+        <h2>2. Booking details</h2>
+        <p>You must give your correct name and a working phone number. The name you enter is printed on the receipt, so please check spelling before you pay. Remarks such as gotra or nakshatra are optional.</p>
+
+        <h2>3. Amounts and payment</h2>
+        <p>Seva amounts are set by the Sansthan and shown before you pay. Payment is made by UPI to the account shown on the payment page. Please pay the exact amount shown.</p>
+        <p>A booking is treated as confirmed only after the Sansthan has checked that the payment has been received. Until then the receipt may show as unverified. Uploading a payment screenshot is optional and helps us check faster.</p>
+
+        <h2>4. Receipts</h2>
+        <p>A receipt is issued for each booking and can be viewed, downloaded or collected in printed form at the temple counter. Please keep your receipt number for reference.</p>
+
+        <h2>5. Cancellations and refunds</h2>
+        <p>Sevas and donations are offerings made for a religious purpose. They are generally not refundable once the booking is confirmed. If you paid by mistake, paid twice, or the seva could not be performed, please contact the temple office with your receipt number and the Sansthan will review your request.</p>
+
+        <h2>6. Performance of sevas</h2>
+        <p>Sevas are performed by the temple priests as per the temple's customs and schedule. The Sansthan may change the date or time of a seva for religious or practical reasons. No particular outcome or result is promised from any seva.</p>
+
+        <h2>7. Proper use</h2>
+        <p>You agree not to submit false details, upload fake or altered payment proof, or misuse the website. The Sansthan may refuse or cancel a booking where payment cannot be verified or false information has been given.</p>
+
+        <h2>8. Changes</h2>
+        <p>The Sansthan may update these terms and the list of sevas and amounts from time to time. The version on this page is the one that applies.</p>
+
+        <h2>9. Governing law</h2>
+        <p>These terms are governed by the laws of India. Any dispute will be subject to the courts having jurisdiction over the place where the Sansthan is located.</p>
+
+        <h2>10. Contact</h2>
+        <p>For questions, write to or call the temple office: {{ c_name }}, {{ c_addr }}. Phone: {{ c_phone }}. Email: {{ c_email }}.</p>
+
+{% elif page == 'contact' %}
+        <p>For booking help, receipts, refund requests or any other question, please contact the temple office.</p>
+
+        <h2>{{ c_name }}</h2>
+        <p>
+            {{ c_addr }}<br>
+            Phone: <a href="tel:+91{{ c_phone|replace(' ','') }}">{{ c_phone }}</a><br>
+            Email: <a href="mailto:{{ c_email }}">{{ c_email }}</a>
+        </p>
+        <p class="muted">When you write to us about a booking, please mention your receipt number and the phone number used for the booking.</p>
+
+{% else %}
+        <p>{{ t_name }} ("the Sansthan") respects your privacy. This policy explains what personal information we collect through this website, why, and how we protect it.</p>
+
+        <h2>1. Information we collect</h2>
+        <ul>
+            <li>Name and phone number you enter while booking a seva</li>
+            <li>Your email address, only if you choose to give it</li>
+            <li>Optional remarks such as gotra or nakshatra</li>
+            <li>The sevas you chose, the amount, the date and time, and the receipt number</li>
+            <li>An optional payment screenshot, if you upload one</li>
+        </ul>
+        <p>We do not collect your UPI PIN, bank password or card details. Payment is made in your own UPI app and never passes through our website.</p>
+
+        <h2>2. Why we collect it</h2>
+        <ul>
+            <li>To record your booking and issue your receipt</li>
+            <li>To verify that your payment was received</li>
+            <li>To help temple staff find your receipt when you visit the counter</li>
+            <li>To keep the temple's accounts and reports</li>
+            <li>To contact you about your booking if needed</li>
+        </ul>
+
+        <h2>3. Sharing</h2>
+        <p>We do not sell or rent your information. It is seen only by authorised temple staff. We may share it with authorities only where the law requires.</p>
+
+        <h2>4. Storage and security</h2>
+        <p>Booking records are stored on the Sansthan's systems. Staff access is controlled by login and role, and receipt links use random tokens that cannot be guessed. No system is completely secure, but we take reasonable steps to protect your information.</p>
+
+        <h2>5. How long we keep it</h2>
+        <p>Receipts and accounting records are kept for as long as needed for the temple's accounts and legal requirements.</p>
+
+        <h2>6. Your choices</h2>
+        <p>You may ask the temple office to correct a wrong name or phone number on your record, or to ask about the information we hold about you. Records needed for accounts or legal reasons may have to be kept.</p>
+
+        <h2>7. Cookies</h2>
+        <p>Our website uses only the basic session cookie needed for staff login. We do not use advertising or tracking cookies.</p>
+
+        <h2>8. Children</h2>
+        <p>Bookings should be made by an adult. Where a seva is offered for a child, the parent or guardian should make the booking.</p>
+
+        <h2>9. Changes to this policy</h2>
+        <p>We may update this policy from time to time. The latest version is always on this page.</p>
+
+        <h2>10. Contact</h2>
+        <p>For privacy questions, contact the temple office: {{ c_name }}, {{ c_addr }}. Phone: {{ c_phone }}. Email: {{ c_email }}.</p>
+{% endif %}
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ temple_name }} - Seva Booking</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f5f7fa; }
+        .card { border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+        .btn-custom { border-radius: 10px; font-size: 18px; }
+        #totalBar {
+            position: sticky; bottom: 0; background: white; padding: 12px;
+            border-top: 1px solid #ddd; border-radius: 0 0 15px 15px;
+        }
+        .breakdown-box {
+            background: #f9f9f9; border-radius: 8px; padding: 10px 14px; margin-top: 10px;
+            font-size: 13px; color: #444;
+        }
+        .breakdown-box ul { margin: 4px 0 0 0; padding-left: 18px; }
+        .combo-card {
+            border: 1px solid #d0e8ff; background: #f4faff; border-radius: 10px;
+            padding: 12px 15px; margin-bottom: 10px; cursor: pointer;
+        }
+        .combo-card.selected { border-color: #0d6efd; background: #e8f2ff; }
+    </style>
+</head>
+<body>
+
+<div class="container mt-4 mb-5" style="max-width: 500px;">
+
+    <h2 class="mb-1 text-center">🛕 {{ temple_name }}</h2>
+    <p class="text-center text-muted mb-4">Select the seva(s) you wish to book</p>
+
+    <form action="/checkout" method="POST" id="bookingForm">
+        <input type="hidden" name="temple_id" value="{{ temple_id }}">
+
+        <div class="card p-3 mb-3">
+            <h6 class="mb-2">🕉️ Sevas</h6>
+            {% for t in templates %}
+            <div class="combo-card" onclick="toggleTemplate(this, {{ t.id }})">
+                <input type="checkbox" name="templates" value="{{ t.id }}" style="display:none;">
+                <div class="d-flex justify-content-between">
+                    <strong>{{ t.name }}</strong>
+                    <span class="fw-bold">₹{{ "%.0f"|format(t.total) }}</span>
+                </div>
+                <div class="text-muted" style="font-size:12px;">
+                    Includes: {% for item in t.seva_items %}{{ item.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+
+            {% if templates|length == 0 %}
+            <p class="text-muted text-center">No sevas available right now</p>
+            {% endif %}
+        </div>
+
+        <div class="card p-3 mb-3">
+            <div id="totalBar" class="d-flex justify-content-between fw-bold">
+                <span>Total</span>
+                <span id="totalAmount">₹0</span>
+            </div>
+            <div class="breakdown-box" id="breakdownBox" style="display:none;">
+                <strong>Sevas to be performed:</strong>
+                <ul id="breakdownList"></ul>
+            </div>
+        </div>
+
+        <div class="card p-3">
+            <input type="text" name="name" class="form-control mb-2" placeholder="Devotee Name" required>
+            <input type="tel" name="phone" class="form-control mb-2" placeholder="Phone Number"
+                   pattern="[0-9]{10}" title="10 digit phone number" required>
+            <input type="email" name="email" class="form-control mb-2" placeholder="Email ID (optional)" maxlength="120">
+            <textarea name="remarks" class="form-control mb-2" placeholder="Remarks / Gotra / Nakshatra (optional)" rows="2"></textarea>
+
+            <button type="submit" class="btn btn-success w-100 mt-2 btn-custom" id="payBtn" disabled>
+                💳 Continue to Payment
+            </button>
+        </div>
+    </form>
+<p class="text-center mt-3" style="font-size:12px;">
+    <a href="/about">About Us</a> | <a href="/terms">Terms &amp; Conditions</a> | <a href="/privacy">Privacy Policy</a> | <a href="/contact">Contact Us</a>
+</p>
+</div>
+
+<script>
+const templateData = {
+    {% for t in templates %}"{{ t.id }}": {name: {{ t.name | tojson }}, total: {{ t.total }}, items: {{ t.seva_items | tojson }} },{% endfor %}
+};
+
+function toggleTemplate(el, id) {
+    const cb = el.querySelector('input[type="checkbox"]');
+    cb.checked = !cb.checked;
+    el.classList.toggle('selected', cb.checked);
+    updateTotal();
+}
+
+function updateTotal() {
+    let total = 0;
+    let breakdown = [];
+
+    document.querySelectorAll('input[name="templates"]:checked').forEach(cb => {
+        const t = templateData[cb.value];
+        total += t.total;
+        t.items.forEach(item => {
+            breakdown.push(item.name);
+        });
+    });
+
+    document.getElementById('totalAmount').innerText = '₹' + total;
+    document.getElementById('payBtn').disabled = total === 0;
+
+    const box = document.getElementById('breakdownBox');
+    const list = document.getElementById('breakdownList');
+    if (breakdown.length > 0) {
+        box.style.display = 'block';
+        list.innerHTML = breakdown.map(b => '<li>' + b + '</li>').join('');
+    } else {
+        box.style.display = 'none';
+    }
+}
+</script>
+
+</body>
+</html>
