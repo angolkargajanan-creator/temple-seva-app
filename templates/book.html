@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background: #f5f7fa; }
+        body { background: #f5f7fa; padding-bottom: 70px; }
         .card { border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
         .btn-custom { border-radius: 10px; font-size: 18px; }
         #totalBar {
@@ -38,6 +38,15 @@
         .combo-card.selected strong { color: #0b4d2c; }
         .combo-card .sel-label { display:none; color:#157347; font-size:12px; font-weight:700; }
         .combo-card.selected .sel-label { display:block; }
+        #sevaSearch { position: sticky; top: 0; z-index: 5; }
+        .search-wrap { position: sticky; top: 0; z-index: 5; background: #fff; padding: 6px 0 8px; }
+        #noMatch { display:none; }
+        #floatBar {
+            position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: none;
+            background: #157347; color: #fff; padding: 10px 16px; cursor: pointer;
+            box-shadow: 0 -3px 12px rgba(0,0,0,.2);
+        }
+        #floatBar .in { max-width: 500px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; font-weight: 700; }
     </style>
 </head>
 <body>
@@ -51,7 +60,13 @@
         <input type="hidden" name="temple_id" value="{{ temple_id }}">
 
         <div class="card p-3 mb-3">
-            <h6 class="mb-2">🕉️ Sevas</h6>
+            <h6 class="mb-1">🕉️ Sevas</h6>
+            {% if templates|length > 5 %}
+            <div class="search-wrap">
+                <input type="search" id="sevaSearch" class="form-control" placeholder="🔍 Search seva (type in English or Marathi)" autocomplete="off">
+                <div class="text-muted mt-1" style="font-size:12px;" id="countInfo">{{ templates|length }} sevas · tap to select</div>
+            </div>
+            {% endif %}
             {% for t in templates %}
             <div class="combo-card" onclick="toggleTemplate(this, {{ t.id }})">
                 <input type="checkbox" name="templates" value="{{ t.id }}" style="display:none;">
@@ -67,6 +82,7 @@
             </div>
             {% endfor %}
 
+            <p id="noMatch" class="text-muted text-center">No seva found. Try another word.</p>
             {% if templates|length == 0 %}
             <p class="text-muted text-center">No sevas available right now</p>
             {% endif %}
@@ -95,6 +111,9 @@
             </button>
         </div>
     </form>
+<div id="floatBar" onclick="document.getElementById('bookingForm').querySelector('input[name=name]').scrollIntoView({behavior:'smooth',block:'center'});">
+    <div class="in"><span id="floatCount">0 selected</span><span id="floatTotal">₹0 &nbsp;Continue ▾</span></div>
+</div>
 <p class="text-center mt-3" style="font-size:12px;">
     <a href="/about">About Us</a> | <a href="/terms">Terms &amp; Conditions</a> | <a href="/privacy">Privacy Policy</a> | <a href="/contact">Contact Us</a>
 </p>
@@ -112,6 +131,48 @@ function toggleTemplate(el, id) {
     updateTotal();
 }
 
+// ---- Search that also works when typing in English letters (e.g. "kunkumarchan") ----
+const DEV = {'क':'k','ख':'k','ग':'g','घ':'g','ङ':'n','च':'c','छ':'c','ज':'j','झ':'j','ञ':'n',
+  'ट':'t','ठ':'t','ड':'d','ढ':'d','ण':'n','त':'t','थ':'t','द':'d','ध':'d','न':'n',
+  'प':'p','फ':'p','ब':'b','भ':'b','म':'m','र':'r','ल':'l','ळ':'l','व':'v',
+  'श':'s','ष':'s','स':'s','ं':'n','ँ':'n','ृ':'r','ऋ':'r'};
+function skel(s, dropNasal) {
+    s = (s || '').toLowerCase();
+    let out = '';
+    for (const ch of s) {
+        if (DEV[ch]) { out += DEV[ch]; continue; }
+        if (/[a-z]/.test(ch)) {
+            if ('aeiouyh'.includes(ch)) continue;           // vowels / aspiration ignored
+            out += ({w:'v', z:'j', f:'p', q:'k', x:'ks'})[ch] || ch;
+        }
+    }
+    // loose sound groups: t/d, c/s(sh), g/k are kept distinct except common pairs
+    out = out.replace(/ss+/g, 's');
+    if (dropNasal) out = out.replace(/[nm]/g, '');
+    return out;
+}
+function cardMatches(card, q) {
+    const text = card.innerText.toLowerCase();
+    if (text.includes(q)) return true;                      // direct (Marathi or English) match
+    const qs = skel(q, false), qs2 = skel(q, true);
+    if (qs.length < 2) return false;
+    return skel(text, false).includes(qs) || (qs2.length >= 4 && skel(text, true).includes(qs2));
+}
+const searchBox = document.getElementById('sevaSearch');
+if (searchBox) {
+    searchBox.addEventListener('input', function () {
+        const q = this.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('.combo-card').forEach(card => {
+            const ok = !q || cardMatches(card, q);
+            card.style.display = ok ? '' : 'none';
+            if (ok) shown++;
+        });
+        document.getElementById('noMatch').style.display = shown === 0 ? 'block' : 'none';
+        document.getElementById('countInfo').innerText = q ? (shown + ' found') : (document.querySelectorAll('.combo-card').length + ' sevas · tap to select');
+    });
+}
+
 function updateTotal() {
     let total = 0;
     let breakdown = [];
@@ -125,6 +186,10 @@ function updateTotal() {
     });
 
     document.getElementById('totalAmount').innerText = '₹' + total;
+    const nSel = document.querySelectorAll('input[name="templates"]:checked').length;
+    document.getElementById('floatCount').innerText = '✓ ' + nSel + ' selected';
+    document.getElementById('floatTotal').innerHTML = '₹' + total + ' &nbsp;Continue ▾';
+    document.getElementById('floatBar').style.display = nSel > 0 ? 'block' : 'none';
     document.getElementById('payBtn').disabled = total === 0;
 
     const box = document.getElementById('breakdownBox');
