@@ -13,6 +13,7 @@ import hmac
 import hashlib
 from datetime import datetime, timedelta
 from functools import wraps
+from zoneinfo import ZoneInfo
 import time
 
 import qrcode
@@ -304,8 +305,13 @@ init_db()
 
 # ================= HELPERS =================
 
+def now_ist():
+    """Current time in Indian Standard Time, whatever the server's clock zone is."""
+    return datetime.now(ZoneInfo('Asia/Kolkata')).replace(tzinfo=None)
+
+
 def today_str():
-    return datetime.now().strftime("%Y-%m-%d")
+    return now_ist().strftime("%Y-%m-%d")
 
 
 def effective_amount(cat_row, on_date=None):
@@ -552,7 +558,7 @@ def record_failed_login(username):
     conn = get_conn()
     c = conn.cursor()
     c.execute("INSERT INTO login_attempts (username, attempted_at) VALUES (?, ?)",
-              (username, datetime.now().isoformat()))
+              (username, now_ist().isoformat()))
     conn.commit()
     conn.close()
 
@@ -560,7 +566,7 @@ def record_failed_login(username):
 def is_login_locked_out(username):
     conn = get_conn()
     c = conn.cursor()
-    cutoff = (datetime.now() - timedelta(minutes=LOGIN_LOCKOUT_MINUTES)).isoformat()
+    cutoff = (now_ist() - timedelta(minutes=LOGIN_LOCKOUT_MINUTES)).isoformat()
     c.execute("""
         SELECT COUNT(*) FROM login_attempts
         WHERE username=? AND attempted_at > ?
@@ -622,7 +628,7 @@ def register():
         password = request.form['password']
         upi_id = request.form.get('upi_id', '')
 
-        expiry_date = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+        expiry_date = (now_ist() + timedelta(days=30)).strftime("%Y-%m-%d")
 
         conn = get_conn()
         c = conn.cursor()
@@ -707,7 +713,7 @@ def dashboard():
     conn = get_conn()
     c = conn.cursor()
 
-    c.execute("SELECT COUNT(*), COALESCE(SUM(total_amount),0) FROM receipts WHERE temple_id=?", (temple_id,))
+    c.execute("SELECT COUNT(*), COALESCE(SUM(total_amount),0) FROM receipts WHERE temple_id=? AND payment_verified=1", (temple_id,))
     count, total = c.fetchone()
 
     c.execute("""
@@ -972,7 +978,7 @@ def manage_users():
             role = request.form['role']
             if role not in ('admin', 'user', 'printing_user'):
                 role = 'user'
-            created_at = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+            created_at = now_ist().strftime("%d-%m-%Y %H:%M:%S")
             try:
                 c.execute("""
                     INSERT INTO temple_users (temple_id, username, password, role, active, created_at)
@@ -1116,7 +1122,7 @@ def receipt_template_preview():
 
     pdf_path = build_receipt_pdf(
         temple['name'], f"PREVIEW-{temple_id}", 1, "9999999999", "",
-        dummy_items, total, datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+        dummy_items, total, now_ist().strftime("%d-%m-%Y %H:%M:%S"),
         subtitle_text, line1_text, line2_text,
     )
     response = send_from_directory(os.path.dirname(pdf_path), os.path.basename(pdf_path))
@@ -1152,7 +1158,7 @@ def _render_legal(page, title):
         t_addr=(t['address'] if t and t['address'] else ''),
         t_phone=(t['phone'] if t and t['phone'] else ''),
         t_upi=(t['upi_id'] if t and t['upi_id'] else ''),
-        updated=datetime.now().strftime('%d %B %Y'),
+        updated=now_ist().strftime('%d %B %Y'),
         c_name=CONTACT_NAME, c_addr=CONTACT_ADDR,
         c_phone=CONTACT_PHONE, c_email=CONTACT_EMAIL,
     )
@@ -1445,7 +1451,7 @@ def confirm_payment():
         # the temple's actual bank/UPI statement and confirms it themselves.
         payment_verified = 0
 
-    created_at = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    created_at = now_ist().strftime("%d-%m-%Y %H:%M:%S")
 
     c.execute("SELECT COALESCE(MAX(seq_no), 0) + 1 FROM receipts WHERE temple_id=?", (temple_id,))
     seq_no = c.fetchone()[0]
@@ -1527,6 +1533,35 @@ def receipt_view(receipt_no):
     return render_template('receipt_counter.html', receipt=receipt, items=items, amount_words=amount_words)
 
 
+@app.route('/receipt/<receipt_no>/delete', methods=['POST'])
+@login_required(['admin', 'user'])
+def delete_unverified_receipt(receipt_no):
+    """Staff-only: removes a booking whose payment was never confirmed
+    (for example a devotee tapped 'I Have Paid' without paying). Verified
+    payments can never be deleted here."""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("SELECT * FROM receipts WHERE receipt_no=?", (receipt_no,))
+    r = c.fetchone()
+    if not r or r['temple_id'] != session['temple_id']:
+        conn.close()
+        return "Not found", 404
+    if r['payment_verified']:
+        conn.close()
+        return "A verified payment cannot be deleted", 400
+    for p in (r['pdf_path'], r['payment_proof_path']):
+        if p:
+            try:
+                os.remove(p.lstrip('/'))
+            except OSError:
+                pass
+    c.execute("DELETE FROM receipt_items WHERE receipt_id=?", (r['id'],))
+    c.execute("DELETE FROM receipts WHERE id=?", (r['id'],))
+    conn.commit()
+    conn.close()
+    return redirect('/counter')
+
+
 @app.route('/receipt/<receipt_no>/mark_printed', methods=['POST'])
 def mark_printed(receipt_no):
     conn = get_conn()
@@ -1556,7 +1591,7 @@ def verify_payment(receipt_no):
     c.execute("""
         UPDATE receipts SET payment_verified=1, verified_by=?, verified_at=?
         WHERE receipt_no=?
-    """, (session.get('staff_username', ''), datetime.now().strftime("%d-%m-%Y %H:%M:%S"), receipt_no))
+    """, (session.get('staff_username', ''), now_ist().strftime("%d-%m-%Y %H:%M:%S"), receipt_no))
     conn.commit()
     conn.close()
     return redirect(request.referrer or url_for('receipt_view', receipt_no=receipt_no))
@@ -1632,7 +1667,7 @@ def reports():
 
     query = """
         SELECT r.* FROM receipts r
-        WHERE r.temple_id=?
+        WHERE r.temple_id=? AND r.payment_verified=1
           AND date(substr(r.created_at,7,4) || '-' || substr(r.created_at,4,2) || '-' || substr(r.created_at,1,2))
               BETWEEN date(?) AND date(?)
     """
