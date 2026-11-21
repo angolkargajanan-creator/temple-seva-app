@@ -214,6 +214,20 @@ def init_db():
     _add_column_if_missing(c, 'receipts', 'verified_by', 'TEXT')
     _add_column_if_missing(c, 'receipts', 'verified_at', 'TEXT')
 
+    # ---- unpaid UPI requests waiting for staff to confirm the money arrived ----
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS pending_bookings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT UNIQUE,
+            temple_id INTEGER,
+            cart_json TEXT,
+            proof_path TEXT,
+            created_at TEXT,
+            status TEXT,
+            receipt_no TEXT
+        )
+    ''')
+
     # ---- line items for each receipt ----
     c.execute('''
         CREATE TABLE IF NOT EXISTS receipt_items (
@@ -601,7 +615,18 @@ def login_required(roles=None):
 
 @app.context_processor
 def inject_role_context():
-    return dict(current_role=session.get('role'), current_username=session.get('staff_username'))
+    pending_count = 0
+    if session.get('temple_id') and session.get('role') in ('admin', 'user'):
+        try:
+            _c = get_conn()
+            pending_count = _c.execute(
+                "SELECT COUNT(*) FROM pending_bookings WHERE temple_id=? AND status='pending'",
+                (session['temple_id'],)).fetchone()[0]
+            _c.close()
+        except Exception:
+            pending_count = 0
+    return dict(current_role=session.get('role'), current_username=session.get('staff_username'),
+                pending_count=pending_count)
 
 
 # ================= HOME =================
@@ -1389,7 +1414,7 @@ def checkout():
 
     upi_link = None
     upi_qr_data_uri = None
-    if not use_gateway and temple['upi_id']:
+    if temple['upi_id']:
         upi_link, upi_qr_data_uri = build_upi_qr_data_uri(
             temple['upi_id'], temple['name'], total, note=f"Seva-{name}"
         )
@@ -1407,6 +1432,7 @@ def checkout():
         phone=phone,
         upi_id=temple['upi_id'],
         upi_link=upi_link,
+        upi_query=(upi_link.split('?', 1)[1] if upi_link else ''),
         upi_qr_data_uri=upi_qr_data_uri,
     )
 
@@ -1451,6 +1477,35 @@ def confirm_payment():
         # the temple's actual bank/UPI statement and confirms it themselves.
         payment_verified = 0
 
+    if payment_verified:
+        # Razorpay: payment is cryptographically confirmed -> receipt now.
+        receipt_no, err = _create_receipt(
+            conn, temple, cart, payment_method, payment_id, payment_status,
+            1, None, '', '')
+        conn.close()
+        if err:
+            return err, 500
+        return redirect(url_for('receipt_view', receipt_no=receipt_no))
+
+    # Direct UPI / manual: no receipt and no booking record is created yet.
+    # The request waits in 'pending_bookings' until temple staff confirm the
+    # money really reached the bank. Only then does a receipt come into being.
+    token = secrets.token_urlsafe(9)
+    proof_path = save_payment_proof(request.files.get('payment_proof'), f"PENDING-{token}")
+    c.execute("""
+        INSERT INTO pending_bookings (token, temple_id, cart_json, proof_path, created_at, status)
+        VALUES (?, ?, ?, ?, ?, 'pending')
+    """, (token, temple_id, cart_json, proof_path, now_ist().strftime("%d-%m-%Y %H:%M:%S")))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('pending_view', token=token))
+
+
+def _create_receipt(conn, temple, cart, payment_method, payment_id, payment_status,
+                    payment_verified, proof_path, verified_by, verified_at):
+    """Creates the receipt row, its items and the PDF. Returns (receipt_no, error)."""
+    c = conn.cursor()
+    temple_id = cart['temple_id']
     created_at = now_ist().strftime("%d-%m-%Y %H:%M:%S")
 
     c.execute("SELECT COALESCE(MAX(seq_no), 0) + 1 FROM receipts WHERE temple_id=?", (temple_id,))
@@ -1466,12 +1521,12 @@ def confirm_payment():
                 INSERT INTO receipts
                 (temple_id, receipt_no, seq_no, name, phone, email, remarks, total_amount,
                  payment_method, payment_id, payment_status, created_at, printed,
-                 subtitle_text, line1_text, line2_text, payment_verified)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+                 subtitle_text, line1_text, line2_text, payment_verified, verified_by, verified_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
             """, (
                 temple_id, receipt_no, seq_no, cart['name'], cart['phone'], cart.get('email', ''), cart['remarks'],
                 cart['total'], payment_method, payment_id, payment_status, created_at,
-                subtitle_text, line1_text, line2_text, payment_verified
+                subtitle_text, line1_text, line2_text, payment_verified, verified_by, verified_at
             ))
             receipt_id = c.lastrowid
             break
@@ -1479,8 +1534,7 @@ def confirm_payment():
             continue
 
     if receipt_id is None:
-        conn.close()
-        return "Could not generate a receipt number, please try again", 500
+        return None, "Could not generate a receipt number, please try again"
 
     for it in cart['items']:
         c.execute("""
@@ -1493,16 +1547,87 @@ def confirm_payment():
         cart['items'], cart['total'], created_at,
         subtitle_text, line1_text, line2_text,
     )
-
-    proof_file = request.files.get('payment_proof')
-    proof_path = save_payment_proof(proof_file, receipt_no)
-
     c.execute("UPDATE receipts SET pdf_path=?, payment_proof_path=? WHERE id=?", (pdf_path, proof_path, receipt_id))
+    conn.commit()
+    return receipt_no, None
 
+
+# ---------------- Pending payments (UPI waiting for staff confirmation) ----------------
+
+@app.route('/pending/<token>')
+def pending_view(token):
+    """Devotee's waiting page. Turns into a link to the receipt once staff approve."""
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM pending_bookings WHERE token=?", (token,)).fetchone()
+    if not row:
+        conn.close()
+        return "Booking not found", 404
+    cart = json.loads(row['cart_json'])
+    temple = conn.execute("SELECT name FROM temples WHERE id=?", (row['temple_id'],)).fetchone()
+    conn.close()
+    if row['status'] == 'approved' and row['receipt_no']:
+        return redirect(url_for('receipt_view', receipt_no=row['receipt_no']))
+    return render_template('pending.html', row=row, cart=cart, temple_name=temple['name'] if temple else '')
+
+
+@app.route('/pending_payments')
+@login_required(['admin', 'user'])
+def pending_payments():
+    conn = get_conn()
+    rows = conn.execute("""
+        SELECT * FROM pending_bookings WHERE temple_id=? AND status='pending' ORDER BY id DESC
+    """, (session['temple_id'],)).fetchall()
+    conn.close()
+    items = [{'row': r, 'cart': json.loads(r['cart_json'])} for r in rows]
+    return render_template('pending_payments.html', items=items)
+
+
+@app.route('/pending_payments/<token>/approve', methods=['POST'])
+@login_required(['admin', 'user'])
+def approve_pending(token):
+    """Staff checked the bank/UPI statement and the money really arrived."""
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM pending_bookings WHERE token=?", (token,)).fetchone()
+    if not row or row['temple_id'] != session['temple_id']:
+        conn.close()
+        return "Not found", 404
+    if row['status'] == 'approved' and row['receipt_no']:
+        conn.close()
+        return redirect(url_for('receipt_view', receipt_no=row['receipt_no']))
+    cart = json.loads(row['cart_json'])
+    temple = conn.execute("SELECT * FROM temples WHERE id=?", (row['temple_id'],)).fetchone()
+    now = now_ist().strftime("%d-%m-%Y %H:%M:%S")
+    receipt_no, err = _create_receipt(
+        conn, temple, cart, 'manual', '', 'paid', 1, row['proof_path'],
+        session.get('staff_username', ''), now)
+    if err:
+        conn.close()
+        return err, 500
+    conn.execute("UPDATE pending_bookings SET status='approved', receipt_no=? WHERE token=?", (receipt_no, token))
     conn.commit()
     conn.close()
-
     return redirect(url_for('receipt_view', receipt_no=receipt_no))
+
+
+@app.route('/pending_payments/<token>/reject', methods=['POST'])
+@login_required(['admin', 'user'])
+def reject_pending(token):
+    """Payment never arrived: the request is discarded (nothing was ever saved as a booking)."""
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM pending_bookings WHERE token=?", (token,)).fetchone()
+    if not row or row['temple_id'] != session['temple_id']:
+        conn.close()
+        return "Not found", 404
+    if row['status'] == 'pending':
+        if row['proof_path']:
+            try:
+                os.remove(row['proof_path'].lstrip('/'))
+            except OSError:
+                pass
+        conn.execute("DELETE FROM pending_bookings WHERE token=?", (token,))
+        conn.commit()
+    conn.close()
+    return redirect('/pending_payments')
 
 
 # ================= COUNTER / RECEIPT + PRINT SCREEN =================
