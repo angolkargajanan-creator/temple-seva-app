@@ -21,7 +21,23 @@
             border: 1px solid #d0e8ff; background: #f4faff; border-radius: 10px;
             padding: 12px 15px; margin-bottom: 10px; cursor: pointer;
         }
-        .combo-card.selected { border-color: #0d6efd; background: #e8f2ff; }
+        .combo-card { position: relative; padding-left: 52px; border-width: 2px; transition: all .15s; }
+        .combo-card:not(.selected) .tick { color: transparent; }
+        .combo-card .tick {
+            position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+            width: 28px; height: 28px; border-radius: 50%;
+            border: 2px solid #9bb5cc; background: #fff; color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px; font-weight: 700; line-height: 1;
+        }
+        .combo-card.selected {
+            border-color: #157347; background: #d1f0dc;
+            box-shadow: 0 0 0 3px rgba(21,115,71,.25);
+        }
+        .combo-card.selected .tick { background: #157347; border-color: #157347; }
+        .combo-card.selected strong { color: #0b4d2c; }
+        .combo-card .sel-label { display:none; color:#157347; font-size:12px; font-weight:700; }
+        .combo-card.selected .sel-label { display:block; }
     </style>
 </head>
 <body>
@@ -39,10 +55,12 @@
             {% for t in templates %}
             <div class="combo-card" onclick="toggleTemplate(this, {{ t.id }})">
                 <input type="checkbox" name="templates" value="{{ t.id }}" style="display:none;">
+                <span class="tick">&#10003;</span>
                 <div class="d-flex justify-content-between">
                     <strong>{{ t.name }}</strong>
                     <span class="fw-bold">₹{{ "%.0f"|format(t.total) }}</span>
                 </div>
+                <div class="sel-label">&#10003; Selected</div>
                 <div class="text-muted" style="font-size:12px;">
                     Includes: {% for item in t.seva_items %}{{ item.name }}{% if not loop.last %}, {% endif %}{% endfor %}
                 </div>
