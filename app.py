@@ -1163,6 +1163,11 @@ def receipt_template_preview():
 # ---------------------------------------------------------------
 # Public information pages: About Us, Terms & Conditions, Privacy
 # ---------------------------------------------------------------
+# Direct UPI-QR payments that staff confirm by hand. Switched OFF: bookings are
+# created only after a payment gateway confirms the payment. Set True to allow
+# the old 'I Have Paid' flow again.
+ALLOW_MANUAL_UPI = False
+
 # Official contact details shown on the public Contact Us page
 CONTACT_NAME = 'SHREE MAHALASA SAUNSTHAN'
 CONTACT_ADDR = 'MARDOL, GOA - 403 404'
@@ -1426,6 +1431,8 @@ def checkout():
         total=total,
         cart_json=cart_json,
         use_gateway=use_gateway,
+        allow_manual=ALLOW_MANUAL_UPI,
+        temple_id=temple_id,
         order_id=order_id,
         key_id=key_id,
         name=name,
@@ -1486,6 +1493,10 @@ def confirm_payment():
         if err:
             return err, 500
         return redirect(url_for('receipt_view', receipt_no=receipt_no))
+
+    if not ALLOW_MANUAL_UPI:
+        conn.close()
+        return "Online payment is required to book a seva", 403
 
     # Direct UPI / manual: no receipt and no booking record is created yet.
     # The request waits in 'pending_bookings' until temple staff confirm the
