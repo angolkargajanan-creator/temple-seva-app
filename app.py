@@ -228,6 +228,8 @@ def init_db():
         )
     ''')
 
+    _add_column_if_missing(c, 'pending_bookings', 'source', 'TEXT')
+
     # ---- line items for each receipt ----
     c.execute('''
         CREATE TABLE IF NOT EXISTS receipt_items (
@@ -1163,10 +1165,82 @@ def receipt_template_preview():
 # ---------------------------------------------------------------
 # Public information pages: About Us, Terms & Conditions, Privacy
 # ---------------------------------------------------------------
-# Direct UPI-QR payments that staff confirm by hand. Switched OFF: bookings are
-# created only after a payment gateway confirms the payment. Set True to allow
-# the old 'I Have Paid' flow again.
-ALLOW_MANUAL_UPI = False
+
+# ---------------- Getepay (UCO Bank) payment gateway ----------------
+# Credentials are NOT stored in the code or database. They are read from the
+# server's protected environment file (/etc/temple.env):
+#   GETEPAY_MID, GETEPAY_TERMINAL_ID, GETEPAY_KEY, GETEPAY_IV, GETEPAY_URL
+GETEPAY_MID = os.environ.get('GETEPAY_MID', '').strip()
+GETEPAY_TERMINAL_ID = os.environ.get('GETEPAY_TERMINAL_ID', '').strip()
+GETEPAY_KEY = os.environ.get('GETEPAY_KEY', '').strip()
+GETEPAY_IV = os.environ.get('GETEPAY_IV', '').strip()
+GETEPAY_URL = os.environ.get('GETEPAY_URL', '').strip()
+
+
+def getepay_enabled():
+    return bool(GETEPAY_MID and GETEPAY_TERMINAL_ID and GETEPAY_KEY and GETEPAY_IV and GETEPAY_URL)
+
+
+def _gp_key_iv():
+    def _decode(v, size):
+        try:
+            raw = base64.b64decode(v, validate=True)
+        except Exception:
+            raw = v.encode()
+        return raw[:size].ljust(size, b'\0')
+    return _decode(GETEPAY_KEY, 32), _decode(GETEPAY_IV, 16)
+
+
+def gp_encrypt(plain):
+    """AES-256-CBC (PKCS7) -> UPPERCASE hex, as the Getepay API expects."""
+    from cryptography.hazmat.primitives import padding
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    key, iv = _gp_key_iv()
+    padder = padding.PKCS7(128).padder()
+    data = padder.update(plain.encode()) + padder.finalize()
+    enc = Cipher(algorithms.AES(key), modes.CBC(iv)).encryptor()
+    return (enc.update(data) + enc.finalize()).hex().upper()
+
+
+def gp_decrypt(hex_text):
+    from cryptography.hazmat.primitives import padding
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    key, iv = _gp_key_iv()
+    dec = Cipher(algorithms.AES(key), modes.CBC(iv)).decryptor()
+    data = dec.update(bytes.fromhex(hex_text.strip())) + dec.finalize()
+    unpad = padding.PKCS7(128).unpadder()
+    return (unpad.update(data) + unpad.finalize()).decode()
+
+
+def gp_parse(plain):
+    """Decrypted text is JSON, sometimes JSON inside a JSON string."""
+    obj = plain
+    for _ in range(3):
+        if isinstance(obj, str):
+            try:
+                obj = json.loads(obj)
+            except ValueError:
+                break
+    return obj if isinstance(obj, dict) else {}
+
+
+def cart_signature(cart_json):
+    """Proves the cart (items and total) was produced by our server and not edited in the browser."""
+    return hmac.new(app.secret_key.encode(), cart_json.encode(), hashlib.sha256).hexdigest()
+
+
+def _public_base(temple_id):
+    conn = get_conn()
+    row = conn.execute("SELECT public_base_url FROM temples WHERE id=?", (temple_id,)).fetchone()
+    conn.close()
+    override = (row['public_base_url'] or '').strip() if row else ''
+    return override.rstrip('/') if override else request.host_url.rstrip('/')
+
+
+# Direct UPI payments that staff confirm by hand (no gateway). True = devotees can
+# pay to the temple UPI ID and the booking is created only after staff press
+# 'Payment Received' on the Pending screen. Set False once a payment gateway is live.
+ALLOW_MANUAL_UPI = True
 
 # Official contact details shown on the public Contact Us page
 CONTACT_NAME = 'SHREE MAHALASA SAUNSTHAN'
@@ -1392,12 +1466,14 @@ def checkout():
     }
     cart_json = json.dumps(cart)
 
-    use_gateway = bool(temple['razorpay_key_id'] and temple['razorpay_key_secret'])
+    razorpay_on = bool(temple['razorpay_key_id'] and temple['razorpay_key_secret'])
+    use_gateway = razorpay_on or getepay_enabled()
+    gateway_kind = 'razorpay' if razorpay_on else ('getepay' if getepay_enabled() else '')
 
     order_id = None
     key_id = None
 
-    if use_gateway:
+    if razorpay_on:
         try:
             resp = requests.post(
                 RAZORPAY_ORDER_URL,
@@ -1431,6 +1507,8 @@ def checkout():
         total=total,
         cart_json=cart_json,
         use_gateway=use_gateway,
+        gateway_kind=gateway_kind,
+        cart_sig=cart_signature(cart_json),
         allow_manual=ALLOW_MANUAL_UPI,
         temple_id=temple_id,
         order_id=order_id,
@@ -1449,6 +1527,8 @@ def checkout():
 @app.route('/confirm_payment', methods=['POST'])
 def confirm_payment():
     cart_json = request.form['cart_json']
+    if not hmac.compare_digest(request.form.get('cart_sig', ''), cart_signature(cart_json)):
+        return "Invalid booking data. Please start the booking again.", 400
     cart = json.loads(cart_json)
 
     payment_method = request.form.get('payment_method', 'manual')
@@ -1561,6 +1641,142 @@ def _create_receipt(conn, temple, cart, payment_method, payment_id, payment_stat
     c.execute("UPDATE receipts SET pdf_path=?, payment_proof_path=? WHERE id=?", (pdf_path, proof_path, receipt_id))
     conn.commit()
     return receipt_no, None
+
+
+
+# ---------------- Getepay payment flow ----------------
+
+@app.route('/getepay/start', methods=['POST'])
+def getepay_start():
+    """Devotee chose to pay online: save the booking as 'waiting', create the
+    Getepay payment and send the devotee to the bank's payment page."""
+    if not getepay_enabled():
+        return "Payment gateway is not connected", 400
+    cart_json = request.form.get('cart_json', '')
+    if not hmac.compare_digest(request.form.get('cart_sig', ''), cart_signature(cart_json)):
+        return "Invalid booking data. Please start the booking again.", 400
+    cart = json.loads(cart_json)
+    temple_id = cart['temple_id']
+
+    token = secrets.token_urlsafe(9)
+    now = now_ist()
+    conn = get_conn()
+    cur = conn.execute("""
+        INSERT INTO pending_bookings (token, temple_id, cart_json, proof_path, created_at, status, source)
+        VALUES (?, ?, ?, NULL, ?, 'pending', 'getepay')
+    """, (token, temple_id, cart_json, now.strftime("%d-%m-%Y %H:%M:%S")))
+    conn.commit()
+    pid = cur.lastrowid
+    conn.close()
+
+    order_no = f"SEVA{pid}{random.randint(1000, 9999)}"
+    payload = {
+        "mid": GETEPAY_MID,
+        "terminalId": GETEPAY_TERMINAL_ID,
+        "vpa": GETEPAY_TERMINAL_ID,
+        "amount": f"{float(cart['total']):.2f}",
+        "merchantTransactionId": order_no,
+        "transactionDate": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "udf1": cart.get('phone', ''),
+        "udf2": cart.get('email', ''),
+        "udf3": cart.get('name', ''),
+        "udf4": "", "udf5": "", "udf6": "", "udf7": "", "udf8": "", "udf9": "", "udf10": "",
+        "ru": _public_base(temple_id) + url_for('getepay_return', token=token),
+        "callbackUrl": "",
+        "currency": "INR",
+        "paymentMode": "ALL",
+        "bankId": "",
+        "txnType": "single",
+        "productType": "IPG",
+        "txnNote": f"Seva booking {order_no}",
+    }
+    try:
+        api_url = GETEPAY_URL
+        if 'generateInvoice' not in api_url:      # bank gave only the server address
+            api_url = api_url.rstrip('/') + '/getepayPortal/pg/generateInvoice'
+        resp = requests.post(
+            api_url,
+            json={"mid": GETEPAY_MID, "terminalId": GETEPAY_TERMINAL_ID, "req": gp_encrypt(json.dumps(payload))},
+            timeout=20,
+        )
+        body = resp.json()
+        data = gp_parse(gp_decrypt(body['response']))
+        pay_url = data.get('paymentUrl')
+        if not pay_url:
+            raise ValueError(f"no paymentUrl in reply (http {resp.status_code})")
+    except Exception as e:
+        app.logger.error("Getepay start failed for %s: %s", order_no, e)
+        conn = get_conn()
+        conn.execute("UPDATE pending_bookings SET status='failed' WHERE token=?", (token,))
+        conn.commit()
+        conn.close()
+        return render_template('getepay_result.html', state='error', temple_id=temple_id), 502
+
+    app.logger.info("Getepay payment created: %s amount=%s", order_no, payload['amount'])
+    return redirect(pay_url)
+
+
+@app.route('/getepay/return/<token>', methods=['GET', 'POST'])
+def getepay_return(token):
+    """Getepay sends the devotee back here with the result (encrypted with our key)."""
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM pending_bookings WHERE token=? AND source='getepay'", (token,)).fetchone()
+    if not row:
+        conn.close()
+        return "Booking not found", 404
+    cart = json.loads(row['cart_json'])
+    temple_id = row['temple_id']
+
+    if row['status'] == 'approved' and row['receipt_no']:
+        conn.close()
+        return redirect(url_for('receipt_view', receipt_no=row['receipt_no']), code=303)
+
+    raw = request.form.get('response') or request.args.get('response') or ''
+    if not raw and request.is_json:
+        raw = (request.get_json(silent=True) or {}).get('response', '')
+    data = {}
+    try:
+        data = gp_parse(gp_decrypt(raw))
+    except Exception as e:
+        app.logger.error("Getepay return could not be decrypted (token %s): %s", token, e)
+
+    status = str(data.get('paymentStatus', '')).strip().upper()
+    txn_id = str(data.get('getepayTxnId') or data.get('merchantOrderNo') or data.get('txnId') or '')
+    app.logger.info("Getepay return token=%s status=%s order=%s keys=%s",
+                    token, status, data.get('merchantOrderNo'), sorted(data.keys()))
+
+    # If the reply carries an amount, it must equal what this booking costs.
+    paid_amt = next((data[k] for k in ('txnAmount', 'amount', 'orderAmount', 'totalAmount') if k in data), None)
+    amount_ok = True
+    if paid_amt is not None:
+        try:
+            amount_ok = abs(float(paid_amt) - float(cart['total'])) < 0.01
+        except (TypeError, ValueError):
+            amount_ok = False
+
+    if status == 'SUCCESS' and amount_ok:
+        temple = conn.execute("SELECT * FROM temples WHERE id=?", (temple_id,)).fetchone()
+        receipt_no, err = _create_receipt(
+            conn, temple, cart, 'getepay', txn_id, 'paid', 1, None, 'getepay',
+            now_ist().strftime("%d-%m-%Y %H:%M:%S"))
+        if err:
+            conn.close()
+            return err, 500
+        conn.execute("UPDATE pending_bookings SET status='approved', receipt_no=? WHERE token=?", (receipt_no, token))
+        conn.commit()
+        conn.close()
+        return redirect(url_for('receipt_view', receipt_no=receipt_no), code=303)
+
+    if status == 'SUCCESS' and not amount_ok:
+        state = 'review'     # money moved but amount differs: keep for staff review
+    elif status in ('FAILED', 'FAILURE', 'CANCELLED', 'CANCELED', 'REJECTED', 'EXPIRED'):
+        state = 'failed'
+        conn.execute("UPDATE pending_bookings SET status='failed' WHERE token=?", (token,))
+        conn.commit()
+    else:
+        state = 'pending'    # still processing or unknown: stays in the staff Pending list
+    conn.close()
+    return render_template('getepay_result.html', state=state, temple_id=temple_id)
 
 
 # ---------------- Pending payments (UPI waiting for staff confirmation) ----------------

@@ -5,3 +5,4 @@ weasyprint==69.0
 requests==2.34.2
 gunicorn==26.0.0
 num2words==0.5.14
+cryptography==50.0.1
