@@ -1699,11 +1699,17 @@ def getepay_start():
             json={"mid": GETEPAY_MID, "terminalId": GETEPAY_TERMINAL_ID, "req": gp_encrypt(json.dumps(payload))},
             timeout=20,
         )
-        body = resp.json()
+        try:
+            body = resp.json()
+        except ValueError:
+            body = {}
+        if not isinstance(body, dict) or not body.get('response'):
+            # The bank refused the request. Its own words go to the log (no keys in them).
+            raise ValueError(f"bank replied http {resp.status_code} with no payment data: {resp.text[:600]!r}")
         data = gp_parse(gp_decrypt(body['response']))
         pay_url = data.get('paymentUrl')
         if not pay_url:
-            raise ValueError(f"no paymentUrl in reply (http {resp.status_code})")
+            raise ValueError(f"no paymentUrl in decrypted reply (http {resp.status_code}): {str(data)[:400]}")
     except Exception as e:
         app.logger.error("Getepay start failed for %s: %s", order_no, e)
         conn = get_conn()
