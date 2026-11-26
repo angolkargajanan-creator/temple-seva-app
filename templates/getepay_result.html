@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Payment status</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style> body { background:#f5f7fa; } .card { border-radius:15px; box-shadow:0 5px 15px rgba(0,0,0,.1); } </style>
+</head>
+<body>
+<div class="container mt-5" style="max-width:480px;">
+  <div class="card p-4 text-center">
+    {% if state == 'failed' %}
+      <div style="font-size:42px;">❌</div>
+      <h5 class="mt-2">Payment not completed</h5>
+      <p class="text-muted">No amount has been booked. If money was deducted from your account, it will be returned by your bank automatically.</p>
+    {% elif state == 'review' %}
+      <div style="font-size:42px;">⏳</div>
+      <h5 class="mt-2">Payment received – under review</h5>
+      <p class="text-muted">The payment amount needs to be checked by the temple office. Please contact the office with your phone number.</p>
+    {% elif state == 'pending' %}
+      <div style="font-size:42px;">⏳</div>
+      <h5 class="mt-2">Payment is being confirmed</h5>
+      <p class="text-muted">We have not yet received the bank&#39;s confirmation. If money was deducted, the temple office will confirm your booking. Please do not pay again.</p>
+    {% else %}
+      <div style="font-size:42px;">⚠️</div>
+      <h5 class="mt-2">Could not start the payment</h5>
+      <p class="text-muted">Please try again in a few minutes. No amount was deducted.</p>
+    {% endif %}
+    <a href="/donate/{{ temple_id }}" class="btn btn-outline-secondary mt-2">← Back to booking</a>
+  </div>
+</div>
+</body>
+</html>

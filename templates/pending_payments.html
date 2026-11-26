@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pending Payments</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f5f7fa; }
+        .top-bar { background: linear-gradient(45deg, #ff9800, #ff5722); color: white; padding: 14px 20px; }
+        .card { border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+<div class="top-bar d-flex justify-content-between align-items-center">
+    <span class="fw-bold fs-5">⏳ Pending Payments</span>
+    <div>
+        <a href="/counter" class="btn btn-light btn-sm">Counter</a>
+        <a href="/dashboard" class="btn btn-light btn-sm">Dashboard</a>
+    </div>
+</div>
+<div class="container mt-4" style="max-width: 760px;">
+    <div class="alert alert-info" style="font-size:13px;">
+        These devotees tapped “I Have Paid”. <strong>Nothing is saved as a booking yet.</strong>
+        Check your bank / UPI statement for the matching amount. Press <strong>Payment Received</strong> to create
+        the receipt, or <strong>Not Received</strong> to discard the request.
+    </div>
+    {% if not items %}
+    <div class="card p-4 text-center text-muted">No pending payments 🎉</div>
+    {% endif %}
+    {% for it in items %}
+    <div class="card p-3 mb-3">
+        <div class="d-flex justify-content-between">
+            <div>
+                <strong>{{ it.cart['name'] }}</strong> · {{ it.cart['phone'] }}
+                {% if it.row['source'] == 'getepay' %}<span class="badge bg-info text-dark">Online payment – not confirmed by bank. Check the Getepay dashboard first</span>{% endif %}<br>
+                <span class="text-muted" style="font-size:12px;">{{ it.row['created_at'] }}</span>
+            </div>
+            <div class="fs-4 fw-bold text-success">₹{{ "%.0f"|format(it.cart['total']) }}</div>
+        </div>
+        <ul class="mb-2 mt-2" style="font-size:14px;">
+            {% for x in it.cart['items'] %}<li>{{ x['name'] }}</li>{% endfor %}
+        </ul>
+        {% if it.row['proof_path'] %}
+        <div class="mb-2" style="font-size:13px;">
+            <a href="/{{ it.row['proof_path'] }}" target="_blank">📎 View screenshot uploaded by devotee</a>
+            <span class="text-muted">(reference only)</span>
+        </div>
+        {% endif %}
+        <div class="d-flex gap-2">
+            <form action="/pending_payments/{{ it.row['token'] }}/approve" method="POST">
+                <button class="btn btn-success btn-sm"
+                        onclick="return confirm('Confirm the money of ₹{{ '%.0f'|format(it.cart['total']) }} really arrived in the bank/UPI statement?')">
+                    ✅ Payment Received — Create Receipt
+                </button>
+            </form>
+            <form action="/pending_payments/{{ it.row['token'] }}/reject" method="POST">
+                <button class="btn btn-outline-danger btn-sm"
+                        onclick="return confirm('Payment NOT received? This request will be discarded.')">
+                    ❌ Not Received
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+<script>setTimeout(function(){ location.reload(); }, 30000);</script>
+</body>
+</html>
