@@ -1224,6 +1224,10 @@ def gp_parse(plain):
     return obj if isinstance(obj, dict) else {}
 
 
+def paid_amt_preview(data):
+    return next((data[k] for k in ('txnAmount', 'amount', 'orderAmount', 'totalAmount') if k in data), None)
+
+
 def cart_signature(cart_json):
     """Proves the cart (items and total) was produced by our server and not edited in the browser."""
     return hmac.new(app.secret_key.encode(), cart_json.encode(), hashlib.sha256).hexdigest()
@@ -1748,15 +1752,21 @@ def getepay_return(token):
 
     status = str(data.get('paymentStatus', '')).strip().upper()
     txn_id = str(data.get('getepayTxnId') or data.get('merchantOrderNo') or data.get('txnId') or '')
-    app.logger.info("Getepay return token=%s status=%s order=%s keys=%s",
-                    token, status, data.get('merchantOrderNo'), sorted(data.keys()))
+    # logged at WARNING so it is visible in the server log (no secrets in it)
+    app.logger.warning("Getepay return token=%s status=%r order=%s message=%r amount_field=%r keys=%s",
+                       token, status, data.get('merchantOrderNo'),
+                       str(data.get('message', data.get('paymentMessage', '')))[:120],
+                       paid_amt_preview(data), sorted(data.keys()))
 
     # If the reply carries an amount, it must equal what this booking costs.
     paid_amt = next((data[k] for k in ('txnAmount', 'amount', 'orderAmount', 'totalAmount') if k in data), None)
     amount_ok = True
     if paid_amt is not None:
         try:
-            amount_ok = abs(float(paid_amt) - float(cart['total'])) < 0.01
+            # The gateway page may add its own fee (e.g. ₹20 -> ₹20.47 for net banking).
+            # Accept the booking amount plus a small fee, never less than the booking amount.
+            _paid, _due = float(paid_amt), float(cart['total'])
+            amount_ok = (_paid >= _due - 0.01) and (_paid <= _due * 1.10 + 5)
         except (TypeError, ValueError):
             amount_ok = False
 
