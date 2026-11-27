@@ -1753,10 +1753,12 @@ def getepay_return(token):
     status = str(data.get('paymentStatus', '')).strip().upper()
     txn_id = str(data.get('getepayTxnId') or data.get('merchantOrderNo') or data.get('txnId') or '')
     # logged at WARNING so it is visible in the server log (no secrets in it)
-    app.logger.warning("Getepay return token=%s status=%r order=%s message=%r amount_field=%r keys=%s",
-                       token, status, data.get('merchantOrderNo'),
-                       str(data.get('message', data.get('paymentMessage', '')))[:120],
-                       paid_amt_preview(data), sorted(data.keys()))
+    app.logger.warning(
+        "Getepay return token=%s status=%r order=%s mode=%r txnStatus=%r settlement=%r surcharge=%r "
+        "message=%r amount_field=%r",
+        token, status, data.get('merchantOrderNo'), data.get('paymentMode'), data.get('txnStatus'),
+        data.get('settlementStatus'), data.get('surcharge'),
+        str(data.get('message', data.get('paymentMessage', '')))[:160], paid_amt_preview(data))
 
     # If the reply carries an amount, it must equal what this booking costs.
     paid_amt = next((data[k] for k in ('txnAmount', 'amount', 'orderAmount', 'totalAmount') if k in data), None)
